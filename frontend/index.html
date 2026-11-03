@@ -23,18 +23,57 @@
       </div>
     </div>
 
-    <div class="field">
-      <label>รหัสพนักงาน (User) — 6 หลัก</label>
-      <input id="login-empid" placeholder="เช่น 100234" maxlength="6" inputmode="numeric" autocomplete="username">
-    </div>
-    <div class="field">
-      <label>รหัสผ่าน (Password)</label>
-      <input id="login-pass" type="password" placeholder="เลข 4 หลักท้ายรหัสพนักงาน" autocomplete="current-password">
+    <!-- Auth Tabs: Sign In / Sign Up -->
+    <div class="login-tabs">
+      <button type="button" class="login-tab active" id="tab-login" onclick="switchAuthTab('login')">เข้าสู่ระบบ (Sign In)</button>
+      <button type="button" class="login-tab" id="tab-register" onclick="switchAuthTab('register')">ลงทะเบียน (Sign Up)</button>
     </div>
 
-    <button class="login-btn" id="login-btn" onclick="doLogin()">เข้าสู่ระบบ</button>
-    <div class="login-err" id="login-err"></div>
-    <div class="login-hint">User: กรอกรหัสพนักงาน 6 หลัก · Password เริ่มต้น = เลข 4 หลักสุดท้ายของรหัสพนักงาน<br>ระบบใช้ได้ทั้ง Requester และ Admin ตามสิทธิ์ที่ผู้ดูแลกำหนดไว้ในระบบ<br><br>ตัวอย่างบัญชีทดลองใช้งาน:<br>• Admin — รหัสพนักงาน 000001 / รหัสผ่าน 0001<br>• Requester — รหัสพนักงาน 200001 / รหัสผ่าน 0001<br><br>แนะนำให้เปลี่ยนรหัสผ่านทันทีในหน้า Settings หลังเข้าใช้งานครั้งแรก</div>
+    <!-- ===== SIGN IN (เข้าสู่ระบบ) ===== -->
+    <div id="auth-panel-login">
+      <div class="field">
+        <label>รหัสพนักงาน (User) — 6 หลัก</label>
+        <input id="login-empid" placeholder="เช่น 100234" maxlength="6" inputmode="numeric" autocomplete="username" onkeydown="if(event.key==='Enter') doLogin()">
+      </div>
+      <div class="field">
+        <label>รหัสผ่าน / เลขหลังบัตรพนักงาน (Password)</label>
+        <input id="login-pass" type="password" placeholder="เลขหลังบัตรพนักงาน หรือ 4 หลักท้าย" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin()">
+      </div>
+
+      <button class="login-btn" id="login-btn" onclick="doLogin()">เข้าสู่ระบบ</button>
+      <div class="login-err" id="login-err"></div>
+      <div class="login-hint">
+        <b>วิธีเข้าสู่ระบบ (Sign In):</b><br>
+        • <b>User:</b> รหัสพนักงาน 6 หลัก<br>
+        • <b>Password:</b> เลขหลังบัตรพนักงาน (สำหรับผู้ที่ลงทะเบียนใหม่) หรือเลข 4 หลักท้ายของรหัสพนักงาน (สำหรับบัญชีเริ่มต้น)<br><br>
+        <b>ตัวอย่างบัญชีทดลองใช้งาน:</b><br>
+        • Admin — รหัสพนักงาน 000001 / รหัสผ่าน 0001<br>
+        • Requester — รหัสพนักงาน 200001 / รหัสผ่าน 0001<br><br>
+        หากยังไม่มีบัญชี สามารถกดแถบ <b>"ลงทะเบียน (Sign Up)"</b> ด้านบนได้ทันที
+      </div>
+    </div>
+
+    <!-- ===== SIGN UP (ลงทะเบียนพนักงานใหม่) ===== -->
+    <div id="auth-panel-register" style="display:none;">
+      <div class="field">
+        <label>รหัสพนักงาน (User) — 6 หลัก <span style="color:var(--danger)">*</span></label>
+        <input id="reg-empid" placeholder="เช่น 200002" maxlength="6" inputmode="numeric" autocomplete="off" onkeydown="if(event.key==='Enter') doRegister()">
+      </div>
+      <div class="field">
+        <label>เลขหลังบัตรพนักงาน (ใช้เป็น Password) <span style="color:var(--danger)">*</span></label>
+        <input id="reg-pass" type="password" placeholder="ระบุเลขหลังบัตรพนักงาน" autocomplete="new-password" onkeydown="if(event.key==='Enter') doRegister()">
+      </div>
+      <div class="field">
+        <label>ยืนยันเลขหลังบัตรพนักงาน <span style="color:var(--danger)">*</span></label>
+        <input id="reg-pass-confirm" type="password" placeholder="กรอกเลขหลังบัตรพนักงานอีกครั้ง" autocomplete="new-password" onkeydown="if(event.key==='Enter') doRegister()">
+      </div>
+
+      <button class="login-btn" id="reg-btn" onclick="doRegister()">ลงทะเบียน</button>
+      <div class="login-err" id="reg-err"></div>
+      <div class="login-hint">
+        ระบบจะสร้างบัญชีผู้ใช้งาน Requester ให้อัตโนมัติ โดยหลังจากนี้สามารถเข้าสู่ระบบด้วย <b>รหัสพนักงาน (User)</b> และ <b>เลขหลังบัตรพนักงาน (Password)</b>
+      </div>
+    </div>
   </div>
 </div>
 

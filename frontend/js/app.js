@@ -79,20 +79,76 @@ function toast(msg, isErr){
 function localGet(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }
 function localSet(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 
-/* ---------- login (employee ID + last-4-digit password) ---------- */
+/* ---------- auth (Sign In & Sign Up with Employee ID + Card Back Number) ---------- */
 function last4(empId){ return String(empId).slice(-4); }
 
+function switchAuthTab(tab){
+  const tabLogin = document.getElementById('tab-login');
+  const tabReg = document.getElementById('tab-register');
+  const panelLogin = document.getElementById('auth-panel-login');
+  const panelReg = document.getElementById('auth-panel-register');
+  const loginErr = document.getElementById('login-err');
+  const regErr = document.getElementById('reg-err');
+  if(loginErr) loginErr.textContent = '';
+  if(regErr) regErr.textContent = '';
+
+  if(tab === 'register'){
+    if(tabLogin) tabLogin.classList.remove('active');
+    if(tabReg) tabReg.classList.add('active');
+    if(panelLogin) panelLogin.style.display = 'none';
+    if(panelReg) panelReg.style.display = 'block';
+    setTimeout(()=>{ const el = document.getElementById('reg-empid'); if(el) el.focus(); }, 60);
+  } else {
+    if(tabReg) tabReg.classList.remove('active');
+    if(tabLogin) tabLogin.classList.add('active');
+    if(panelReg) panelReg.style.display = 'none';
+    if(panelLogin) panelLogin.style.display = 'block';
+    setTimeout(()=>{ const el = document.getElementById('login-empid'); if(el) el.focus(); }, 60);
+  }
+}
+
 async function doLogin(){
-  const empId = document.getElementById('login-empid').value.trim();
-  const pass = document.getElementById('login-pass').value;
+  const empId = (document.getElementById('login-empid')?.value || '').trim();
+  const pass = document.getElementById('login-pass')?.value || '';
   const err = document.getElementById('login-err');
-  err.textContent = '';
-  if(!/^\d{6}$/.test(empId)){ err.textContent = 'กรุณากรอกรหัสพนักงานเป็นตัวเลข 6 หลัก'; return; }
-  if(!pass){ err.textContent = 'กรุณากรอกรหัสผ่าน'; return; }
+  const btn = document.getElementById('login-btn');
+  if(err) err.textContent = '';
+  if(!/^\d{6}$/.test(empId)){ if(err) err.textContent = 'กรุณากรอกรหัสพนักงานเป็นตัวเลข 6 หลัก'; return; }
+  if(!pass){ if(err) err.textContent = 'กรุณากรอกรหัสผ่าน / เลขหลังบัตรพนักงาน'; return; }
+  if(btn) btn.disabled = true;
   try{
     CURRENT_USER = await Api.login(empId, pass);
     enterApp();
-  }catch(e){ err.textContent = e.message || 'เข้าสู่ระบบไม่สำเร็จ'; }
+  }catch(e){
+    if(err) err.textContent = e.message || 'เข้าสู่ระบบไม่สำเร็จ';
+  }finally{
+    if(btn) btn.disabled = false;
+  }
+}
+
+async function doRegister(){
+  const empId = (document.getElementById('reg-empid')?.value || '').trim();
+  const pass = (document.getElementById('reg-pass')?.value || '').trim();
+  const passConfirm = (document.getElementById('reg-pass-confirm')?.value || '').trim();
+  const err = document.getElementById('reg-err');
+  const btn = document.getElementById('reg-btn');
+  if(err) err.textContent = '';
+
+  if(!/^\d{6}$/.test(empId)){ if(err) err.textContent = 'กรุณากรอกรหัสพนักงานเป็นตัวเลข 6 หลัก'; return; }
+  if(!pass){ if(err) err.textContent = 'กรุณากรอกเลขหลังบัตรพนักงานเพื่อใช้เป็น Password'; return; }
+  if(pass.length < 4){ if(err) err.textContent = 'เลขหลังบัตรพนักงานต้องมีอย่างน้อย 4 หลัก'; return; }
+  if(pass !== passConfirm){ if(err) err.textContent = 'เลขหลังบัตรพนักงานและการยืนยันไม่ตรงกัน'; return; }
+
+  if(btn) btn.disabled = true;
+  try{
+    CURRENT_USER = await Api.register(empId, pass);
+    toast('ลงทะเบียนสำเร็จ ยินดีต้อนรับ ' + (CURRENT_USER.name || ''));
+    enterApp();
+  }catch(e){
+    if(err) err.textContent = e.message || 'ลงทะเบียนไม่สำเร็จ';
+  }finally{
+    if(btn) btn.disabled = false;
+  }
 }
 
 function doLogout(){
@@ -100,6 +156,10 @@ function doLogout(){
   Api.logout();
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
+  switchAuthTab('login');
+  const lp = document.getElementById('login-pass'); if(lp) lp.value = '';
+  const rp = document.getElementById('reg-pass'); if(rp) rp.value = '';
+  const rpc = document.getElementById('reg-pass-confirm'); if(rpc) rpc.value = '';
   if(unsubRequests) unsubRequests();
   if(unsubChambers) unsubChambers();
   if(unsubEmployees) unsubEmployees();

@@ -21,7 +21,7 @@
     catch (e) { throw new Error('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ — ตรวจสอบว่า backend เปิดอยู่'); }
 
     const json = await res.json().catch(() => ({}));
-    if (res.status === 401 && token && !path.startsWith('/auth/login')) {
+    if (res.status === 401 && token && !path.startsWith('/auth/')) {
       clearToken(); location.reload();
     }
     if (!res.ok) throw new Error(json.error || ('HTTP ' + res.status));
@@ -72,6 +72,11 @@
     clearToken,
     async login(empId, password) {
       const r = await request('POST', '/auth/login', { empId, password });
+      setToken(r.token);
+      return r.user;
+    },
+    async register(empId, password) {
+      const r = await request('POST', '/auth/register', { empId, password });
       setToken(r.token);
       return r.user;
     },

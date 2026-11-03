@@ -22,13 +22,55 @@ router.post('/login', (req, res) => {
   if (tooMany(empId)) return res.status(429).json({ error: 'ลองผิดหลายครั้งเกินไป กรุณารอสักครู่' });
 
   const emp = store.get('employees', empId);
-  if (!emp) return res.status(401).json({ error: 'ไม่พบรหัสพนักงานนี้ในระบบ กรุณาติดต่อผู้ดูแลระบบ' });
+  if (!emp) return res.status(401).json({ error: 'ไม่พบรหัสพนักงานนี้ในระบบ กรุณาลงทะเบียนใหม่หรือติดต่อผู้ดูแลระบบ' });
   if (!verifyPassword(password, emp.passwordHash)) {
     recordFail(empId);
-    return res.status(401).json({ error: 'รหัสผ่านไม่ถูกต้อง' });
+    return res.status(401).json({ error: 'รหัสผ่านหรือเลขหลังบัตรพนักงานไม่ถูกต้อง' });
   }
   fails.delete(empId);
   res.json({ token: createSession(empId), user: publicUser(empId, emp) });
+});
+
+router.post('/register', (req, res) => {
+  const { empId, password, name, dept } = req.body || {};
+  const cleanId = String(empId || '').trim();
+  const cleanPass = String(password || '').trim();
+  const cleanName = String(name || '').trim();
+  const cleanDept = String(dept || '').trim();
+
+  if (!/^\d{6}$/.test(cleanId)) {
+    return res.status(400).json({ error: 'กรุณากรอกรหัสพนักงานเป็นตัวเลข 6 หลัก' });
+  }
+  if (!cleanPass) {
+    return res.status(400).json({ error: 'กรุณากรอกเลขหลังบัตรพนักงานเพื่อใช้เป็นรหัสผ่าน' });
+  }
+  if (cleanPass.length < 4) {
+    return res.status(400).json({ error: 'เลขหลังบัตรพนักงานต้องมีอย่างน้อย 4 ตัวอักษร/หลัก' });
+  }
+
+  const existing = store.get('employees', cleanId);
+  if (existing) {
+    return res.status(400).json({ error: 'รหัสพนักงานนี้มีอยู่ในระบบแล้ว กรุณาเข้าสู่ระบบ' });
+  }
+
+  const now = new Date().toISOString();
+  const employeeData = {
+    empId: cleanId,
+    name: cleanName || `พนักงาน ${cleanId}`,
+    dept: cleanDept || '-',
+    role: 'requester',
+    passwordHash: hashPassword(cleanPass),
+    createdAt: now,
+  };
+
+  store.set('employees', cleanId, employeeData);
+  const token = createSession(cleanId);
+  res.json({
+    ok: true,
+    token,
+    user: publicUser(cleanId, employeeData),
+    message: 'ลงทะเบียนพนักงานใหม่สำเร็จ',
+  });
 });
 
 router.get('/me', requireAuth, (req, res) => res.json({ user: req.user }));
