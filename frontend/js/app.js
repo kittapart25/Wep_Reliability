@@ -27,16 +27,16 @@ let tempSimTimer = null;
 
 /* ---------- LPN lines ---------- */
 const LINES = ['LPN1','LPN2'];
-const LINE_LABEL = { LPN1:'LPN 1', LPN2:'LPN 2', all:'ทั้งหมด' };
-let calLine = 'LPN1';   // ตารางแพลนงาน
+const LINE_LABEL = { LPN1:'LPN 1', LPN2:'LPN 2', all:'ทั้งหมด', requests:'ทั้งหมด' };
+let calLine = 'requests';   // ตารางแพลนงาน
 let kpiLine = 'all';    // สรุป KPI
 function chamberLine(c){ return (c && c.line) || 'LPN1'; }
-function chambersOfLine(line){ return line==='all' ? CHAMBERS : CHAMBERS.filter(c=>chamberLine(c)===line); }
+function chambersOfLine(line){ return (line==='all' || line==='requests') ? CHAMBERS : CHAMBERS.filter(c=>chamberLine(c)===line); }
 function requestLine(r){
   if(r.chamberId){ const c = CHAMBERS.find(x=>x.id===r.chamberId); if(c) return chamberLine(c); }
   return r.line || null;
 }
-function filterByLine(list, line){ return line==='all' ? list : list.filter(r=>requestLine(r)===line); }
+function filterByLine(list, line){ return (line==='all' || line==='requests') ? list : list.filter(r=>requestLine(r)===line); }
 function lineTag(line){ return `<span class="line-tag ${line==='LPN2'?'lpn2':''}">${LINE_LABEL[line]||line}</span>`; }
 function lineSwitchHtml(current, setter, withAll){
   const opts = withAll ? ['all', ...LINES] : LINES;
@@ -205,7 +205,6 @@ const NAV_ADMIN = [
   {id:'calendar', icon:'▦', label:'ตารางแพลนงาน'},
   {id:'add-request', icon:'＋', label:'Add New Request'},
   {id:'timeline-calc', icon:'⏱', label:'คำนวณระยะเวลาทดสอบ'},
-  {id:'requests', icon:'☰', label:'รายการ Request ทั้งหมด'},
   {id:'report', icon:'▤', label:'ออก Report (Word)'},
   {id:'kpi', icon:'◔', label:'สรุป KPI'},
   {id:'settings', icon:'⚙', label:'ตั้งค่าระบบ'},
@@ -216,6 +215,10 @@ function buildNav(){
   el.innerHTML = items.map(it=>`<button class="nav-item" data-nav="${it.id}" onclick="navigate('${it.id}')"><span class="nav-icon">${it.icon}</span>${esc(it.label)}</button>`).join('');
 }
 function navigate(page){
+  if(page === 'requests'){
+    calLine = 'requests';
+    page = 'calendar';
+  }
   currentPage = page;
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.nav===page));
   document.getElementById('sidebar').classList.remove('open');
@@ -274,60 +277,127 @@ function render(){
 /* ============================================================
    PAGE: Add New Request
    ============================================================ */
+const REL_TEST_CONDITIONS = [
+  'Thermal Shock',
+  'Thermal Cycling',
+  'High Temp Storage',
+  'Low Temp Storage',
+  'Humidity / Damp Heat',
+  'Vibration',
+  'Drop Test',
+  'IP Rating (Water/Dust)',
+  'Other'
+];
+let reqTestConditions = [{ condition: 'Thermal Shock', standard: '' }];
+
+function renderReqConditionsHtml(){
+  if(!reqTestConditions || !reqTestConditions.length){
+    reqTestConditions = [{ condition: 'Thermal Shock', standard: '' }];
+  }
+  const isMulti = reqTestConditions.length > 1;
+  return reqTestConditions.map((item, idx) => `
+    ${idx > 0 ? `<div class="cond-seq-arrow"><span>↓</span> ทดสอบต่อเนื่องลำดับที่ ${idx + 1} (Step ${idx + 1})</div>` : ''}
+    <div class="cond-step-card ${isMulti ? 'is-multi' : ''}">
+      ${isMulti ? `
+        <div class="cond-step-head">
+          <span class="cond-step-badge">Step ${idx + 1}</span>
+          <span class="cond-step-label">${idx === 0 ? 'การทดสอบลำดับแรก' : `การทดสอบต่อเนื่องลำดับที่ ${idx + 1}`}</span>
+          <button type="button" class="cond-step-remove" onclick="removeReqTestCondition(${idx})" title="ลบเงื่อนไขการทดสอบนี้">✕ ลบ</button>
+        </div>
+      ` : ''}
+      <div class="form-grid cond-step-grid">
+        <div>
+          <label class="form-label">Rel Test Condition ${isMulti ? `(Step ${idx + 1})` : ''} <span class="req-star">*</span></label>
+          <select ${idx === 0 ? 'id="f-condition"' : ''} class="form-input" onchange="updateReqTestCondition(${idx}, 'condition', this.value)">
+            ${REL_TEST_CONDITIONS.map(opt => `<option value="${esc(opt)}" ${item.condition === opt ? 'selected' : ''}>${esc(opt)}</option>`).join('')}
+          </select>
+          <span class="field-hint">เลือกประเภทการทดสอบความคงทน</span>
+        </div>
+
+        <div>
+          <label class="form-label">Test Condition ${isMulti ? `(Step ${idx + 1})` : ''}</label>
+          <input ${idx === 0 ? 'id="f-standard"' : ''} class="form-input" value="${esc(item.standard || '')}" oninput="updateReqTestCondition(${idx}, 'standard', this.value)" placeholder="เช่น 85°C / 85% RH, 500 hrs">
+          <span class="field-hint">ระบุสภาวะอุณหภูมิ ความชื้น เวลา</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function updateReqTestCondition(idx, field, val){
+  if(!reqTestConditions[idx]) return;
+  reqTestConditions[idx][field] = val;
+}
+
+function addReqTestCondition(){
+  reqTestConditions.push({ condition: 'Thermal Shock', standard: '' });
+  const container = document.getElementById('req-conditions-list');
+  if(container) container.innerHTML = renderReqConditionsHtml();
+}
+
+function removeReqTestCondition(idx){
+  if(reqTestConditions.length <= 1) return;
+  reqTestConditions.splice(idx, 1);
+  const container = document.getElementById('req-conditions-list');
+  if(container) container.innerHTML = renderReqConditionsHtml();
+}
+
 function pageAddRequest(){
   const userInitial = CURRENT_USER && CURRENT_USER.name ? CURRENT_USER.name.trim().charAt(0).toUpperCase() : 'U';
   return `
   <div class="page-head">
-    <div><h2>Add New Request</h2><div class="sub">กรอกรายละเอียดคำขอทดสอบความคงทน — ทีม Admin จะรับงานและแพลนคิวให้ในลำดับถัดไป</div></div>
+    <div>
+      <h2>Add New Request</h2>
+      <div class="sub">กรอกรายละเอียดคำขอทดสอบความคงทน — ทีม Admin จะรับงานและแพลนคิวให้ในลำดับถัดไป</div>
+    </div>
   </div>
 
-  <div class="card req-form-card">
-    <!-- ผู้ส่งคำขอ -->
+  <div class="req-form-container">
+    <!-- แถบข้อมูลผู้ส่งคำขอ -->
     <div class="req-user-bar">
       <div class="req-user-avatar">${userInitial}</div>
       <div class="req-user-info">
         <div class="req-user-name">
           <span>${esc(CURRENT_USER.name)}</span>
-          <span class="badge badge-scheduled" style="font-size:10.5px;padding:2px 8px;">ผู้ส่งคำขอ</span>
+          <span class="badge badge-scheduled" style="font-size:11px;padding:3px 10px;">ผู้ส่งคำขอ (Requester)</span>
         </div>
         <div class="req-user-meta">แผนก: <b>${esc(CURRENT_USER.dept)}</b> &nbsp;·&nbsp; รหัสพนักงาน: <b>${esc(CURRENT_USER.empId)}</b></div>
       </div>
     </div>
 
     <div class="req-form-layout">
-      <!-- ส่วนที่ 1: ข้อมูลชิ้นงานและการทดสอบ -->
+      <!-- หัวข้อที่ 1: ข้อมูลชิ้นงานและเงื่อนไขการทดสอบ -->
       <div class="form-section">
-        <div class="form-section-title">
-          <span class="sec-num">1</span>
-          <span>ข้อมูลชิ้นงานและเงื่อนไขการทดสอบ</span>
+        <div class="form-section-header">
+          <div class="form-section-title">
+            <span class="sec-num">1</span>
+            <div>
+              <div class="sec-heading">ข้อมูลชิ้นงานและเงื่อนไขการทดสอบ</div>
+              <div class="sec-sub">ระบุรายละเอียดผลิตภัณฑ์ ประเภทการทดสอบ สภาวะมาตรฐาน และจำนวนชิ้นงานตัวอย่าง</div>
+            </div>
+          </div>
         </div>
-        <div class="form-grid">
+
+        <div class="form-grid req-grid-sec1">
           <div class="full">
-            <label class="form-label">ชื่อผลิตภัณฑ์ / ชิ้นงาน <span class="req-star">*</span></label>
+            <label class="form-label">ชื่อผลิตภัณฑ์ / ชิ้นงาน (Product / Part Name) <span class="req-star">*</span></label>
             <input id="f-product" class="form-input" placeholder="เช่น Housing Cover Rev.C หรือ Mainboard PCBA">
             <span class="field-hint">ระบุชื่อรุ่น ชิ้นส่วน หรือ Part Number ที่ต้องการส่งทดสอบ</span>
           </div>
 
-          <div>
-            <label class="form-label">Rel Test Condition <span class="req-star">*</span></label>
-            <select id="f-condition" class="form-input">
-              <option>Thermal Shock</option>
-              <option>Thermal Cycling</option>
-              <option>High Temp Storage</option>
-              <option>Low Temp Storage</option>
-              <option>Humidity / Damp Heat</option>
-              <option>Vibration</option>
-              <option>Drop Test</option>
-              <option>IP Rating (Water/Dust)</option>
-              <option>Other</option>
-            </select>
-            <span class="field-hint">เลือกประเภทการทดสอบความคงทน</span>
-          </div>
-
-          <div>
-            <label class="form-label">Test Condition</label>
-            <input id="f-standard" class="form-input" placeholder="เช่น 85°C / 85% RH, 500 hrs หรือ IEC 60068-2-14">
-            <span class="field-hint">ระบุสภาวะหรือมาตรฐานที่ต้องการทดสอบ</span>
+          <div class="full">
+            <div class="cond-section-bar">
+              <div>
+                <div class="cond-section-title">ลำดับและเงื่อนไขการทดสอบ (Test Conditions)</div>
+                <div class="cond-section-sub">กรณีต้องการทดสอบหลายเงื่อนไขต่อเนื่องกัน สามารถกดปุ่ม <b>+ Add Test Condition</b> เพื่อเพิ่มลำดับถัดไปได้</div>
+              </div>
+              <button type="button" class="btn btn-sm btn-add-cond" onclick="addReqTestCondition()">
+                <span>＋</span> Add Test Condition
+              </button>
+            </div>
+            <div id="req-conditions-list" class="req-conditions-list">
+              ${renderReqConditionsHtml()}
+            </div>
           </div>
 
           <div>
@@ -335,7 +405,7 @@ function pageAddRequest(){
             <select id="f-line" class="form-input">
               ${LINES.map(l=>`<option value="${l}">${LINE_LABEL[l]}</option>`).join('')}
             </select>
-            <span class="field-hint">เลือกไลน์หรือโซนการผลิตที่เกี่ยวข้อง</span>
+            <span class="field-hint">เลือกไลน์หรือโซนเครื่องทดสอบที่เกี่ยวข้อง</span>
           </div>
 
           <div>
@@ -344,38 +414,48 @@ function pageAddRequest(){
               <input id="f-qty" class="form-input" type="number" min="1" value="1">
               <span class="input-unit">ชิ้น / pcs</span>
             </div>
-            <span class="field-hint">จำนวนชิ้นงานตัวอย่างที่ส่งทดสอบ</span>
+            <span class="field-hint">จำนวนชิ้นงานตัวอย่างที่ส่งเข้าห้องแล็บ</span>
           </div>
         </div>
 
-        <div class="form-section-tip" style="margin-top:16px;">
-          <span style="font-size:16px;">💡</span>
-          <span style="font-size:12px;color:var(--muted);line-height:1.5;">ตรวจสอบประเภทและสภาวะการทดสอบให้ครบถ้วน ข้อมูลนี้จะใช้ในการจัดคิว Chamber และออก Report</span>
+        <div class="form-section-tip">
+          <span class="tip-icon">💡</span>
+          <span>ตรวจสอบประเภทและสภาวะการทดสอบให้ครบถ้วน ข้อมูลนี้จะใช้ในการจัดคิว Chamber และออกใบรายงานผล (Report)</span>
         </div>
       </div>
 
-      <!-- ส่วนที่ 2: ความเร่งด่วนและหมายเหตุ -->
+      <!-- หัวข้อที่ 2: ความเร่งด่วนและหมายเหตุเพิ่มเติม (เรียงต่อลงมาจากหัวข้อที่ 1 เต็มหน้าจอ) -->
       <div class="form-section">
-        <div class="form-section-title">
-          <span class="sec-num">2</span>
-          <span>ความเร่งด่วนและหมายเหตุเพิ่มเติม</span>
+        <div class="form-section-header">
+          <div class="form-section-title">
+            <span class="sec-num">2</span>
+            <div>
+              <div class="sec-heading">ความเร่งด่วนและหมายเหตุเพิ่มเติม</div>
+              <div class="sec-sub">กำหนดระดับความสำคัญ วัตถุประสงค์ของการทดสอบ และแนบไฟล์หรือรูปภาพประกอบ</div>
+            </div>
+          </div>
         </div>
-        <div class="form-grid">
+
+        <div class="form-grid req-grid-sec2">
           <div class="full">
-            <label class="form-label">ระดับความเร่งด่วน</label>
+            <label class="form-label">ระดับความเร่งด่วน (Priority)</label>
             <div class="priority-selector">
               <label class="priority-opt">
                 <input type="radio" name="priority-radio" value="Normal" checked onchange="document.getElementById('f-priority').value='Normal'">
                 <span class="priority-card">
-                  <span class="priority-badge p-normal">Normal</span>
-                  <span class="priority-desc">ทดสอบตามลำดับคิวปกติ</span>
+                  <div class="priority-card-top">
+                    <span class="priority-badge p-normal">● Normal (ปกติ)</span>
+                  </div>
+                  <span class="priority-desc">จัดคิวและดำเนินการทดสอบตามลำดับคิวปกติของห้องปฏิบัติการ</span>
                 </span>
               </label>
               <label class="priority-opt">
                 <input type="radio" name="priority-radio" value="Urgent" onchange="document.getElementById('f-priority').value='Urgent'">
                 <span class="priority-card">
-                  <span class="priority-badge p-urgent">Urgent</span>
-                  <span class="priority-desc">งานเร่งด่วนพิเศษ / มีผลต่อการผลิตหรือส่งมอบ</span>
+                  <div class="priority-card-top">
+                    <span class="priority-badge p-urgent">⚡ Urgent (เร่งด่วนพิเศษ)</span>
+                  </div>
+                  <span class="priority-desc">งานเร่งด่วนที่มีผลต่อแผนการผลิต การส่งมอบลูกค้า หรือการแก้ไขปัญหาเร่งด่วน</span>
                 </span>
               </label>
               <input type="hidden" id="f-priority" value="Normal">
@@ -384,14 +464,13 @@ function pageAddRequest(){
 
           <div class="full">
             <label class="form-label">วัตถุประสงค์ / รายละเอียดเพิ่มเติม (Remark)</label>
-            <textarea id="f-remark" class="form-input" rows="2" placeholder="ระบุวัตถุประสงค์ เช่น เพื่อรับรองวัสดุใหม่, ข้อควรระวังพิเศษ หรือวันที่ต้องการทราบผล"></textarea>
+            <textarea id="f-remark" class="form-input" rows="3" placeholder="ระบุวัตถุประสงค์ เช่น เพื่อรับรองวัสดุใหม่, ข้อควรระวังพิเศษในการตั้งค่า หรือวันที่ต้องการทราบผล"></textarea>
+            <span class="field-hint">ข้อมูลเพิ่มเติมสำหรับแจ้งทีม Admin หรือผู้ดูแลเครื่องทดสอบ</span>
           </div>
 
           <!-- แนบไฟล์หรือรูปภาพ -->
           <div class="full">
-            <label class="form-label">
-              แนบไฟล์หรือรูปภาพ (Attachments)
-            </label>
+            <label class="form-label">แนบไฟล์หรือรูปภาพประกอบ (Attachments)</label>
             <div class="file-dropzone-wrap">
               <div class="file-dropzone" 
                    onclick="document.getElementById('f-attachment-input').click()"
@@ -417,9 +496,9 @@ function pageAddRequest(){
 
     <!-- ปุ่มดำเนินการ -->
     <div class="form-actions-bar">
-      <button type="button" class="btn" onclick="resetRequestForm()">ล้างข้อมูล</button>
+      <button type="button" class="btn btn-reset" onclick="resetRequestForm()">ล้างข้อมูลฟอร์ม</button>
       <button type="button" class="btn btn-primary btn-submit" onclick="submitRequest()">
-        <span>✓</span> ส่ง Request
+        <span>✓</span> ส่งคำขอทดสอบ (Submit Request)
       </button>
     </div>
   </div>`;
@@ -614,8 +693,9 @@ window.addEventListener('paste', (e) => {
 
 function resetRequestForm(){
   const p = document.getElementById('f-product'); if(p) p.value = '';
-  const c = document.getElementById('f-condition'); if(c) c.selectedIndex = 0;
-  const s = document.getElementById('f-standard'); if(s) s.value = '';
+  reqTestConditions = [{ condition: 'Thermal Shock', standard: '' }];
+  const cl = document.getElementById('req-conditions-list');
+  if(cl) cl.innerHTML = renderReqConditionsHtml();
   const q = document.getElementById('f-qty'); if(q) q.value = 1;
   const pr = document.getElementById('f-priority'); if(pr) pr.value = 'Normal';
   const rNormal = document.querySelector('input[name="priority-radio"][value="Normal"]');
@@ -629,7 +709,15 @@ function resetRequestForm(){
 
 async function submitRequest(){
   const product = document.getElementById('f-product').value.trim();
-  const condition = document.getElementById('f-condition').value;
+  const steps = (reqTestConditions && reqTestConditions.length ? reqTestConditions : [{ condition: 'Thermal Shock', standard: '' }]).map((item, i) => ({
+    step: i + 1,
+    condition: item.condition || 'Thermal Shock',
+    standard: (item.standard || '').trim()
+  }));
+  const condition = steps.length === 1 ? steps[0].condition : steps.map(s => s.condition).join(' → ');
+  const standardText = steps.length === 1
+    ? steps[0].standard
+    : (steps.some(s => s.standard) ? steps.map(s => `Step ${s.step}: ${s.standard || '-'}`).join(' → ') : '');
   if(!product){ toast('กรุณากรอกชื่อผลิตภัณฑ์', true); return; }
   if(!db){ toast('ไม่สามารถบันทึกได้ ฐานข้อมูลไม่พร้อมใช้งาน', true); return; }
 
@@ -670,7 +758,8 @@ async function submitRequest(){
       requestNo,
       productName: product,
       testCondition: condition,
-      testStandard: document.getElementById('f-standard').value.trim(),
+      testStandard: standardText,
+      testConditions: steps,
       quantity: Number(document.getElementById('f-qty').value)||1,
       priority: document.getElementById('f-priority').value,
       line: document.getElementById('f-line').value,
@@ -693,6 +782,7 @@ async function submitRequest(){
     // Cleanup
     reqSelectedFiles.forEach(f => { if(f.previewUrl) URL.revokeObjectURL(f.previewUrl); });
     reqSelectedFiles = [];
+    reqTestConditions = [{ condition: 'Thermal Shock', standard: '' }];
 
     calSubTab = 'list';
     navigate('calendar');
@@ -715,22 +805,31 @@ let tcEndDateGlobal = null;
 
 function pageTimelineCalc(){
   return `
-  <div class="page-head"><div><h2>คำนวณระยะเวลาทดสอบ</h2><div class="sub">ระบุเครื่องและเงื่อนไข เพื่อคำนวณวัน-เวลาสิ้นสุดการทดสอบ พร้อมปฏิทินแสดงช่วงเวลาแบบเต็มจอ</div></div></div>
+  <div class="page-head">
+    <div>
+      <h2>คำนวณระยะเวลาทดสอบ</h2>
+      <div class="sub">ระบุเครื่องและเงื่อนไขการทดสอบ เพื่อคำนวณวัน-เวลาสิ้นสุด พร้อมปฏิทินแสดงช่วงเวลาแบบเต็มหน้าจอ</div>
+    </div>
+  </div>
 
-  <div class="tc-layout-grid">
-    <!-- ฝั่งซ้าย: ตั้งค่าพารามิเตอร์และสรุปผล -->
-    <div class="tc-left-col">
+  <div class="tc-page-container">
+    <!-- แถวบน: ซ้าย = พารามิเตอร์การทดสอบ | ขวา = สรุปผลการคำนวณ -->
+    <div class="tc-top-grid">
+      <!-- ฝั่งซ้าย: ตั้งค่าพารามิเตอร์การทดสอบ -->
       <div class="card tc-calc-card">
         <div class="tc-card-title">
-          <span>⚙️</span>
-          <div>พารามิเตอร์การทดสอบ</div>
+          <span class="tc-title-icon">⚙️</span>
+          <div>
+            <div class="tc-title-main">พารามิเตอร์การทดสอบ</div>
+            <div class="tc-title-sub">เลือกเครื่องทดสอบ วัน-เวลาเริ่มต้น และระบุเงื่อนไข</div>
+          </div>
         </div>
 
-        <div class="form-grid">
+        <div class="form-grid tc-form-grid">
           <div class="full">
             <label class="form-label">เลือกเครื่องทดสอบ <span class="req-star">*</span></label>
             <select id="tc-machineType" class="form-input" onchange="tcToggleFields()">
-              <option value="">-- เลือกเครื่อง --</option>
+              <option value="">-- เลือกเครื่องทดสอบ --</option>
               <option value="HTS">High Temperature Storage (HTS)</option>
               <option value="THS">Temperature Humidity Storage (THS)</option>
               <option value="TMCL">Temperature Cycle (TMCL)</option>
@@ -743,11 +842,11 @@ function pageTimelineCalc(){
             <input type="date" id="tc-startDate" class="form-input">
           </div>
           <div>
-            <label class="form-label">เวลาเริ่มต้น <span class="req-star">*</span></label>
-            <input type="text" id="tc-startTime" class="form-input" placeholder="HH:MM" maxlength="5">
+            <label class="form-label">เวลาเริ่มต้น (24 ชม.) <span class="req-star">*</span></label>
+            <input type="text" id="tc-startTime" class="form-input" placeholder="เช่น 08:30" maxlength="5">
           </div>
 
-          <div id="tc-manualAdd" class="full" style="display:none; grid-template-columns:1fr 1fr; gap:12px;">
+          <div id="tc-manualAdd" class="full tc-sub-params" style="display:none;">
             <div>
               <label class="form-label">ต้องการเพิ่ม (ชั่วโมง)</label>
               <input type="number" id="tc-addHours" class="form-input" value="0" min="0">
@@ -758,14 +857,14 @@ function pageTimelineCalc(){
             </div>
           </div>
 
-          <div id="tc-cycleParams" class="full" style="display:none; grid-template-columns:1fr 1fr; gap:12px;">
+          <div id="tc-cycleParams" class="full tc-sub-params" style="display:none;">
             <div>
-              <label class="form-label">อุณหภูมิด้านเย็น (Cold)</label>
-              <input type="number" id="tc-coldTemp" class="form-input" step="0.1" placeholder="°C">
+              <label class="form-label">อุณหภูมิด้านเย็น (Cold °C)</label>
+              <input type="number" id="tc-coldTemp" class="form-input" step="0.1" placeholder="เช่น -40">
             </div>
             <div>
-              <label class="form-label">อุณหภูมิด้านร้อน (Hot)</label>
-              <input type="number" id="tc-hotTemp" class="form-input" step="0.1" placeholder="°C">
+              <label class="form-label">อุณหภูมิด้านร้อน (Hot °C)</label>
+              <input type="number" id="tc-hotTemp" class="form-input" step="0.1" placeholder="เช่น 125">
             </div>
             <div>
               <label class="form-label">Dwell time (นาที)</label>
@@ -776,52 +875,83 @@ function pageTimelineCalc(){
               <input type="number" id="tc-transfer" class="form-input" min="0" step="0.1" value="0">
             </div>
             <div class="full">
-              <label class="form-label">Cycle (รอบ)</label>
+              <label class="form-label">จำนวนรอบ (Cycle)</label>
               <input type="number" id="tc-cycle" class="form-input" min="1" value="1">
             </div>
           </div>
         </div>
 
         <div class="tc-actions-row">
-          <button class="btn btn-primary tc-btn-calc" onclick="tcCalculate()">⚡ คำนวณ</button>
-          <button class="btn" onclick="tcSetCurrentTime()">ตั้งเวลาปัจจุบัน</button>
-          <button class="btn" onclick="tcResetForm()">รีเซ็ต</button>
+          <button class="btn btn-primary tc-btn-calc" onclick="tcCalculate()">⚡ คำนวณระยะเวลา</button>
+          <button class="btn" onclick="tcSetCurrentTime()">🕒 เวลาปัจจุบัน</button>
+          <button class="btn" onclick="tcResetForm()">↺ รีเซ็ต</button>
         </div>
       </div>
 
-      <!-- สรุปผลการคำนวณ -->
-      <div class="tc-result" id="tc-resultBox" style="display:none;">
-        <div class="tc-result-head">
-          <span style="color:var(--accent);">📊</span>
-          <span>สรุปผลการคำนวณ</span>
-        </div>
-        <div class="tc-result-item"><span class="tc-label">วันที่-เวลาเริ่มต้น</span><span class="tc-value" id="tc-origDate"></span></div>
-        <div class="tc-result-item"><span class="tc-label">ระยะเวลาที่เพิ่ม</span><span class="tc-value" id="tc-addedTime"></span></div>
-        <div class="tc-result-item tc-result-highlight" id="tc-endDateRow"><span class="tc-label">วันที่-เวลาสิ้นสุด</span><span class="tc-value" id="tc-endDate"></span></div>
-        <div class="tc-result-item" id="tc-conditionRow"><span class="tc-label">Condition</span><span class="tc-value" id="tc-condition"></span></div>
-      </div>
-    </div>
-
-    <!-- ฝั่งขวา: ปฏิทินแสดงช่วงเวลาทดสอบ เต็มพื้นที่จอ -->
-    <div class="tc-right-col">
-      <div class="card tc-calendar-card-panel">
+      <!-- ฝั่งขวา: สรุปผลการคำนวณ -->
+      <div class="card tc-summary-card">
         <div class="tc-card-title">
-          <span>📅</span>
+          <span class="tc-title-icon">📊</span>
           <div>
-            <div style="font-weight:700;">ปฏิทินแสดงช่วงเวลาทดสอบ (Timeline Calendar)</div>
-            <div style="font-size:12px;color:var(--muted);font-weight:400;margin-top:2px;">แสดงวันและเวลาเริ่มต้น-สิ้นสุดของการทดสอบบนปฏิทิน</div>
+            <div class="tc-title-main">สรุปผลการคำนวณ</div>
+            <div class="tc-title-sub">รายละเอียดวัน-เวลาเริ่มต้น ระยะเวลาที่ใช้ และวัน-เวลาสิ้นสุด</div>
           </div>
         </div>
 
-        <div id="tc-calendarBox" style="display:none; width:100%;">
-          <div id="tc-calendarContainer"></div>
+        <div class="tc-result" id="tc-resultBox" style="display:none;">
+          <div class="tc-result-grid">
+            <div class="tc-result-item">
+              <span class="tc-label">🟢 วันที่-เวลาเริ่มต้น (Start)</span>
+              <span class="tc-value" id="tc-origDate"></span>
+            </div>
+            <div class="tc-result-item">
+              <span class="tc-label">⏱ ระยะเวลาที่ทดสอบ (Duration)</span>
+              <span class="tc-value" id="tc-addedTime"></span>
+            </div>
+            <div class="tc-result-item" id="tc-conditionRow" style="display:none;">
+              <span class="tc-label">🔬 เงื่อนไข (Condition)</span>
+              <span class="tc-value" id="tc-condition"></span>
+            </div>
+            <div class="tc-result-item tc-result-highlight" id="tc-endDateRow">
+              <span class="tc-label">🏁 วันที่-เวลาสิ้นสุด (Finish)</span>
+              <span class="tc-value" id="tc-endDate"></span>
+            </div>
+          </div>
         </div>
 
-        <div id="tc-calendarPlaceholder" class="tc-placeholder">
-          <div class="tc-placeholder-icon">📆</div>
-          <h4>ยังไม่มีการคำนวณระยะเวลา</h4>
-          <p>เลือกประเภทเครื่องทดสอบ ระบุวันที่และเวลาเริ่มต้น จากนั้นกดปุ่ม <b>"คำนวณ"</b> เพื่อแสดงช่วงเวลาทดสอบบนปฏิทินแบบเต็มหน้าจอ</p>
+        <div id="tc-resultPlaceholder" class="tc-summary-placeholder">
+          <div class="tc-placeholder-icon">⏱️</div>
+          <h4>รอข้อมูลสำหรับการคำนวณ</h4>
+          <p>กรอกพารามิเตอร์การทดสอบทางด้านซ้าย แล้วกดปุ่ม <b>"⚡ คำนวณระยะเวลา"</b> เพื่อแสดงสรุปวันและเวลาสิ้นสุดการทดสอบที่นี่</p>
         </div>
+      </div>
+    </div>
+
+    <!-- แถวล่าง: ปฏิทินแสดงช่วงเวลาทดสอบ เต็มหน้าจอ -->
+    <div class="card tc-calendar-card-panel">
+      <div class="tc-card-title tc-calendar-top-bar">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span class="tc-title-icon">📅</span>
+          <div>
+            <div class="tc-title-main">ปฏิทินแสดงช่วงเวลาทดสอบ (Timeline Calendar)</div>
+            <div class="tc-title-sub">แสดงช่วงวันและเวลาเริ่มต้น–สิ้นสุดการทดสอบบนปฏิทินแบบเต็มหน้าจอ</div>
+          </div>
+        </div>
+        <div class="tc-cal-legend">
+          <span><i class="tc-dot tc-dot-start"></i> วันเริ่ม (Start)</span>
+          <span><i class="tc-dot tc-dot-range"></i> ช่วงกำลังทดสอบ</span>
+          <span><i class="tc-dot tc-dot-end"></i> วันสิ้นสุด (Finish)</span>
+        </div>
+      </div>
+
+      <div id="tc-calendarBox" style="display:none; width:100%;">
+        <div id="tc-calendarContainer"></div>
+      </div>
+
+      <div id="tc-calendarPlaceholder" class="tc-placeholder">
+        <div class="tc-placeholder-icon">📆</div>
+        <h4>ยังไม่มีการคำนวณระยะเวลา</h4>
+        <p>เลือกประเภทเครื่องทดสอบ ระบุวันที่และเวลาเริ่มต้น จากนั้นกดปุ่ม <b>"⚡ คำนวณระยะเวลา"</b> ด้านบน เพื่อแสดงช่วงเวลาทดสอบบนปฏิทินแบบเต็มหน้าจอ</p>
       </div>
     </div>
   </div>`;
@@ -832,6 +962,8 @@ function initTimelineCalc(){
   tcToggleFields();
   const box = document.getElementById('tc-resultBox');
   if(box) box.style.display = 'none';
+  const rph = document.getElementById('tc-resultPlaceholder');
+  if(rph) rph.style.display = 'flex';
   const cal = document.getElementById('tc-calendarBox');
   if(cal) cal.style.display = 'none';
   const ph = document.getElementById('tc-calendarPlaceholder');
@@ -930,6 +1062,8 @@ function tcCalculate(){
   endEl.classList.toggle('tc-end-date-red', tcEndDateGlobal.getDay() === 0);
 
   document.getElementById('tc-resultBox').style.display = 'block';
+  const rph = document.getElementById('tc-resultPlaceholder');
+  if(rph) rph.style.display = 'none';
   document.getElementById('tc-calendarBox').style.display = 'block';
   const ph = document.getElementById('tc-calendarPlaceholder');
   if(ph) ph.style.display = 'none';
@@ -1031,6 +1165,8 @@ function tcResetForm(){
   document.getElementById('tc-cycle').value = '1';
   tcToggleFields();
   document.getElementById('tc-resultBox').style.display = 'none';
+  const rph = document.getElementById('tc-resultPlaceholder');
+  if(rph) rph.style.display = 'flex';
   const cal = document.getElementById('tc-calendarBox');
   if(cal) cal.style.display = 'none';
   const ph = document.getElementById('tc-calendarPlaceholder');
@@ -1075,17 +1211,21 @@ function statusBadge(status){
    current user for non-admin roles via requestsInMonth() below. */
 
 /* ============================================================
-   PAGE: All requests (admin)
+   PAGE: All requests (embedded in Calendar Hub)
    ============================================================ */
 function pageAllRequests(){
+  const isAdmin = CURRENT_USER && CURRENT_USER.role === 'admin';
+  let inMonth = requestsInMonth(planRefDate);
+  if(!isAdmin) inMonth = inMonth.filter(r=>r.requesterEmpId===CURRENT_USER.empId);
   return `
-  <div class="page-head"><div><h2>รายการ Request ทั้งหมด</h2><div class="sub">คลิกที่แถวเพื่อแก้ไขข้อมูลหรือแพลนงานเข้าปฏิทิน</div></div></div>
   <div class="card">
-    ${REQUESTS.length===0 ? '<div class="empty">ยังไม่มี Request ในระบบ</div>' : `
+    ${!isAdmin ? `<div style="font-size:12.5px;color:var(--muted);margin-bottom:10px;">แสดงเฉพาะ Request ของคุณ (${esc(CURRENT_USER.name)})</div>` : ''}
+    ${monthNavBar()}
+    ${inMonth.length===0 ? `<div class="empty">${isAdmin?'ไม่มี Request ในเดือนนี้':'คุณยังไม่มี Request ในเดือนนี้ — ไปที่ "Add New Request" เพื่อเริ่มต้น'}</div>` : `
     <div class="table-wrap"><table>
-      <thead><tr><th>Request No.</th><th>ผู้ขอ</th><th>ผลิตภัณฑ์</th><th>Condition</th><th>สถานะ</th><th>Chamber</th><th>ช่วงทดสอบ</th><th></th></tr></thead>
+      <thead><tr><th>Request No.</th><th>ผู้ขอ</th><th>ผลิตภัณฑ์</th><th>ฝั่ง</th><th>Condition</th><th>สถานะ</th><th>Chamber</th><th>ช่วงทดสอบ</th><th></th></tr></thead>
       <tbody>
-      ${REQUESTS.map(r=>`<tr>
+      ${inMonth.map(r=>`<tr>
         <td class="mono">
           <div style="display:flex;align-items:center;gap:6px;">
             <a href="javascript:void(0)" onclick="openRequestDetailModal('${r.id}')" style="color:var(--accent);text-decoration:none;font-weight:600;" title="คลิกดูรายละเอียด">${esc(r.requestNo)}</a>
@@ -1094,13 +1234,14 @@ function pageAllRequests(){
         </td>
         <td>${esc(r.requesterName)}<br><span style="color:var(--muted);font-size:11px;">${esc(r.department)}</span></td>
         <td>${esc(r.productName)}</td>
+        <td>${requestLine(r) ? lineTag(requestLine(r)) : '<span style="color:var(--muted);">—</span>'}</td>
         <td>${esc(r.testCondition)}</td>
         <td>${statusBadge(r.status)}</td>
         <td>${esc(r.chamberName||'—')}</td>
         <td class="mono" style="font-size:11.5px;">${fmtDateTime(r.startDateTime)}<br>${fmtDateTime(r.endDateTime)}</td>
         <td style="white-space:nowrap;">
           <button class="btn btn-sm" onclick="openRequestDetailModal('${r.id}')">ดูข้อมูล</button>
-          <button class="btn btn-sm btn-primary" onclick="openPlanModal('${r.id}')">แพลนงาน</button>
+          ${isAdmin ? `<button class="btn btn-sm btn-primary" onclick="openPlanModal('${r.id}')">แพลนงาน</button>` : ''}
         </td>
       </tr>`).join('')}
       </tbody>
@@ -1378,15 +1519,18 @@ function relStatusBadge(conclusion){
 
 function pageCalendarHub(){
   return `
-  <div class="page-head"><div><h2>ตารางแพลนงาน</h2><div class="sub">List, Board, Calendar และ Summary ของงานทดสอบ — เลือกฝั่ง LPN ที่ต้องการดู</div></div></div>
-  ${lineSwitchHtml(calLine, 'calLine', false)}
+  <div class="page-head"><div><h2>ตารางแพลนงาน</h2><div class="sub">รายการ Request ทั้งหมด, List, Board, Calendar และ Summary ของงานทดสอบ — เลือกดูรายการทั้งหมดหรือแยกฝั่ง LPN</div></div></div>
+  <div class="line-switch">
+    <button class="${calLine==='requests'?'active':''}" onclick="calLine='requests'; render();">รายการ Request ทั้งหมด</button>
+    ${LINES.map(l=>`<button class="${calLine===l?'active':''}" onclick="calLine='${l}'; render();">${LINE_LABEL[l]}</button>`).join('')}
+  </div>
   <div class="detail-tabs">
     <button class="detail-tab ${calSubTab==='list'?'active':''}" onclick="switchCalSubTab('list')">List</button>
     <button class="detail-tab ${calSubTab==='board'?'active':''}" onclick="switchCalSubTab('board')">Board</button>
     <button class="detail-tab ${calSubTab==='calendar'?'active':''}" onclick="switchCalSubTab('calendar')">Calendar</button>
     <button class="detail-tab ${calSubTab==='summary'?'active':''}" onclick="switchCalSubTab('summary')">Summary</button>
   </div>
-  ${calSubTab==='list' ? calListView() : calSubTab==='board' ? calBoardView() : calSubTab==='calendar' ? calCalendarView() : calSummaryView()}
+  ${calSubTab==='list' ? (calLine==='requests' ? pageAllRequests() : calListView()) : calSubTab==='board' ? calBoardView() : calSubTab==='calendar' ? calCalendarView() : calSummaryView()}
   `;
 }
 
@@ -1804,6 +1948,20 @@ function openRequestDetailModal(requestId){
     </div>
 
     <div style="background:var(--panel2); padding:12px; border-radius:8px; border:1px solid var(--border); font-size:13px; margin-bottom:14px;">
+      ${r.testConditions && r.testConditions.length > 1 ? `
+        <div style="margin-bottom:10px; padding-bottom:10px; border-bottom:1px dashed var(--border);">
+          <div style="font-size:11.5px; color:var(--muted); font-weight:600; margin-bottom:6px;">ลำดับการทดสอบต่อเนื่อง (${r.testConditions.length} ขั้นตอน):</div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            ${r.testConditions.map((tc, i) => `
+              <div style="display:flex; align-items:center; gap:8px; background:var(--panel); padding:6px 10px; border-radius:6px; border:1px solid var(--border);">
+                <span class="badge badge-scheduled" style="font-size:10.5px;">Step ${tc.step || (i+1)}</span>
+                <b>${esc(tc.condition)}</b>
+                ${tc.standard ? `<span style="color:var(--muted);">— ${esc(tc.standard)}</span>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
         <div><span style="color:var(--muted);">Rel Test Condition:</span> <b>${esc(r.testCondition)}</b></div>
         <div><span style="color:var(--muted);">Test Condition / Std:</span> <b>${esc(r.testStandard||'-')}</b></div>
@@ -2095,7 +2253,7 @@ function renderReportRightPanelHtml(r){
   <div class="report-actions-footer">
     <div style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;">
       <span>💡</span>
-      <span>ระบบจะดึงข้อมูลการทดสอบและสร้างไฟล์ Microsoft Word (.docx) ตาม Template มาตรฐาน</span>
+      <span>ระบบจะดึงข้อมูลการทดสอบและสร้างไฟล์ Microsoft Word (.docx) ตาม Template </span>
     </div>
     <button class="report-gen-btn" onclick="generateReport('${r.id}')">
       <span>📄</span>
