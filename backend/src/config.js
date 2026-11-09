@@ -2,6 +2,7 @@ const path = require('path');
 
 module.exports = {
   PORT: process.env.PORT || 3000,
+  MONGODB_URI: process.env.MONGODB_URI || '',
   DATA_FILE: process.env.DATA_FILE || path.join(__dirname, '..', 'data', 'db.json'),
   UPLOAD_DIR: process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads'),
   FRONTEND_DIR: process.env.FRONTEND_DIR || path.join(__dirname, '..', '..', 'frontend'),
